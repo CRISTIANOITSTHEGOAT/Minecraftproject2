@@ -1,0 +1,14 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+
+# Local test artifacts
+screenshot_*.png
