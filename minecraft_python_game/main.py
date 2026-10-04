@@ -239,11 +239,11 @@ class GameController:
         if key == "right mouse down":
             res = self.player.place_selected_block(settings=self.settings)
             if res == "crafting_table":
-                self.ui.show_inventory_screen("crafting")
+                self.ui.show_inventory_screen("crafting", table=True)
             elif res == "furnace":
                 self.ui.show_inventory_screen("furnace")
             elif res == "chest":
-                self.ui.show_inventory_screen("crafting")
+                self.ui.show_inventory_screen("crafting", table=False)
             elif res == "ate":
                 self.ui.show_notification("Ate food (+Hunger)", duration=1.5)
 
@@ -257,6 +257,9 @@ class GameController:
 
         if self.ui is None:
             return
+
+        # Per-frame UI updates on every screen (cursor stack, tooltips, furnace anims)
+        self.ui.update_frame(dt)
 
         # Check player death transition
         if self.player is not None and self.player.is_dead and self.ui.active_screen != "death":

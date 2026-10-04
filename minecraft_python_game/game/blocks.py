@@ -27,6 +27,8 @@ FURNACE = 17
 TORCH = 18
 CHEST = 19
 COBBLESTONE = 20
+BIRCH = 21
+WOOL = 22
 
 # Atlas grid size (16x16 tiles, each 16x16 pixels -> 256x256 image)
 ATLAS_COLS = 16
@@ -62,6 +64,32 @@ TILE_COORDS: Dict[str, Tuple[int, int]] = {
     "chest_side": (8, 1),
     "chest_top": (9, 1),
     "cobblestone": (10, 1),
+    "furnace_lit": (11, 1),
+    "birch_side": (12, 1),
+    "birch_top": (13, 1),
+    "wool": (14, 1),
+    "selection": (15, 1),
+    # Block-breaking crack overlay stages (Minecraft destroy stages)
+    "crack_0": (0, 2),
+    "crack_1": (1, 2),
+    "crack_2": (2, 2),
+    "crack_3": (3, 2),
+    "crack_4": (4, 2),
+    # Mob skins (head/body/limb tiles used by the articulated mob models)
+    "pig_side": (6, 2),
+    "pig_face": (7, 2),
+    "cow_side": (8, 2),
+    "cow_face": (9, 2),
+    "sheep_side": (10, 2),
+    "sheep_face": (11, 2),
+    "zombie_head": (12, 2),
+    "zombie_body": (13, 2),
+    "zombie_legs": (14, 2),
+    "skeleton_face": (15, 2),
+    "skeleton_body": (0, 3),
+    "creeper_face": (1, 3),
+    "creeper_skin": (2, 3),
+    "zombie_arm": (3, 3),
 }
 
 
@@ -363,6 +391,29 @@ BLOCKS_BY_ID: Dict[int, BlockDef] = {
         faces={"top": "cobblestone", "bottom": "cobblestone", "side": "cobblestone"},
         base_color=(115, 115, 118),
     ),
+    BIRCH: BlockDef(
+        id=BIRCH,
+        key="birch",
+        name="Birch Log",
+        solid=True,
+        transparent=False,
+        hardness=1.0,
+        preferred_tool="axe",
+        drop_item="birch",
+        faces={"top": "birch_top", "bottom": "birch_top", "side": "birch_side"},
+        base_color=(214, 210, 196),
+    ),
+    WOOL: BlockDef(
+        id=WOOL,
+        key="wool",
+        name="White Wool",
+        solid=True,
+        transparent=False,
+        hardness=0.4,
+        drop_item="wool",
+        faces={"top": "wool", "bottom": "wool", "side": "wool"},
+        base_color=(233, 233, 233),
+    ),
 }
 
 BLOCKS_BY_KEY: Dict[str, BlockDef] = {b.key: b for b in BLOCKS_BY_ID.values()}
@@ -376,7 +427,7 @@ for b_id, b_def in BLOCKS_BY_ID.items():
     if b_id in (AIR, WATER):
         continue
     fuel = 0.0
-    if b_def.key == "wood":
+    if b_def.key in ("wood", "birch"):
         fuel = 6.0
     elif b_def.key == "planks":
         fuel = 4.5
@@ -399,6 +450,7 @@ _MATERIALS = [
     ItemDef("gold_ingot", "Gold Ingot", "material", max_stack=64, icon_color=(248, 212, 62)),
     ItemDef("diamond", "Diamond", "material", max_stack=64, icon_color=(82, 236, 245)),
     ItemDef("bone", "Bone", "material", max_stack=64, icon_color=(235, 232, 220)),
+    ItemDef("gunpowder", "Gunpowder", "material", max_stack=64, icon_color=(130, 130, 130)),
 ]
 
 # 3. Register Foods

@@ -11,6 +11,7 @@ import numpy as np
 from game.blocks import (
     AIR,
     BEDROCK,
+    BIRCH,
     COAL_ORE,
     DIAMOND_ORE,
     DIRT,
@@ -325,10 +326,13 @@ class TerrainGenerator:
                 h_val = ((world_x * 73856093) ^ (world_z * 19349663) ^ self.seed_int) & 0xFFFFFFFF
                 # ~1.8% chance on eligible grass columns, spaced on a 3x3 subgrid
                 if (world_x % 3 == 0) and (world_z % 3 == 0) and (h_val % 100 < 14):
-                    trunk_h = 4 + (h_val % 2)
+                    # ~30% of trees are birch (white bark), like Minecraft forests
+                    is_birch = ((h_val >> 3) % 10) < 3
+                    trunk_block = BIRCH if is_birch else WOOD
+                    trunk_h = (5 + (h_val % 2)) if is_birch else 4 + (h_val % 2)
                     # Build trunk
                     for ty in range(sy + 1, sy + 1 + trunk_h):
-                        blocks[x, ty, z] = WOOD
+                        blocks[x, ty, z] = trunk_block
                     # Build leaf canopy
                     canopy_base = sy + trunk_h - 1
                     for ly in range(canopy_base, canopy_base + 2):

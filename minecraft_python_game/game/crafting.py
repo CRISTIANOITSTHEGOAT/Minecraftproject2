@@ -204,6 +204,33 @@ class CraftingSystem:
             return False
         return inventory.has_items(recipe.ingredients)
 
+    def match_grid(self, grid: List[Optional[object]], grid_size: int = 3, has_table: bool = True):
+        """
+        Minecraft-style shapeless grid matching: the multiset of single items
+        placed in the crafting grid must exactly equal a recipe's ingredients.
+        2x2 grids (player inventory) cannot craft table-only recipes.
+        Returns the matching CraftingRecipe or None.
+        """
+        placed: List[str] = []
+        for st in grid:
+            if st is None:
+                continue
+            if getattr(st, "count", 1) != 1:
+                return None  # grid slots must hold single items for matching
+            placed.append(st.item_id)
+        if not placed:
+            return None
+        if len(placed) > grid_size * grid_size:
+            return None
+        placed_sorted = sorted(placed)
+        for rec in self.recipes:
+            if rec.requires_table and not (has_table or grid_size >= 3):
+                continue
+            need = sorted(k for k, cnt in rec.ingredients.items() for _ in range(cnt))
+            if need == placed_sorted:
+                return rec
+        return None
+
     def craft(self, recipe_or_id, inventory: Inventory) -> bool:
         """
         Consume recipe ingredients from `inventory` and add the crafted result.

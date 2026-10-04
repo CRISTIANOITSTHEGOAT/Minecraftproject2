@@ -282,6 +282,26 @@ class Chunk:
                 w_uvs.extend(w_uv4)
                 w_cols.extend((wc, wc, wc, wc))
 
+            # Vertical water sides where water meets air (river banks & shores)
+            w_uv_side = _UV_LUT[(WATER, "north")]
+            water_side_dirs = (
+                # (padded offset slice, quad builder)
+                ((1, 0, 0), lambda fx, fy, fz, t: ((fx + 1.0, fy, fz), (fx + 1.0, fy, fz + 1.0), (fx + 1.0, fy + t, fz + 1.0), (fx + 1.0, fy + t, fz))),
+                ((-1, 0, 0), lambda fx, fy, fz, t: ((fx, fy, fz + 1.0), (fx, fy, fz), (fx, fy + t, fz), (fx, fy + t, fz + 1.0))),
+                ((0, 0, 1), lambda fx, fy, fz, t: ((fx + 1.0, fy, fz + 1.0), (fx, fy, fz + 1.0), (fx, fy + t, fz + 1.0), (fx + 1.0, fy + t, fz + 1.0))),
+                ((0, 0, -1), lambda fx, fy, fz, t: ((fx, fy, fz), (fx + 1.0, fy, fz), (fx + 1.0, fy + t, fz), (fx, fy + t, fz))),
+            )
+            for (ox, oy, oz), quad_fn in water_side_dirs:
+                nb = padded[1 + ox:1 + ox + CHUNK_SIZE, 1 + oy:1 + oy + CHUNK_HEIGHT, 1 + oz:1 + oz + CHUNK_SIZE]
+                mask = is_water & (nb == AIR)
+                for x, y, z in np.argwhere(mask):
+                    fx, fy, fz = float(x), float(y), float(z)
+                    b_idx = len(w_verts)
+                    w_verts.extend(quad_fn(fx, fy, fz, 0.88))
+                    w_tris.extend((b_idx, b_idx + 1, b_idx + 2, b_idx, b_idx + 2, b_idx + 3))
+                    w_uvs.extend(w_uv_side)
+                    w_cols.extend((wc, wc, wc, wc))
+
             w_mesh = Mesh(vertices=w_verts, triangles=w_tris, uvs=w_uvs, colors=w_cols, static=True)
             if self.water_entity is None:
                 self.water_entity = Entity(

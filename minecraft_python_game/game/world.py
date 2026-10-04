@@ -60,6 +60,8 @@ class World:
         self.sky_dome = None
         self.sun_entity = None
         self.moon_entity = None
+        self.cloud_entities: List[list] = []  # [entity, home_x, home_z, drift_speed]
+        self._cloud_time: float = 0.0
         self._init_sky_entities()
 
         # Short-lived block break particles: list of [entity, vx, vy, vz, ttl]
@@ -77,20 +79,46 @@ class World:
                 unlit=True,
                 color=sky_col,
             )
+            # Flat square sun & moon (Minecraft-style billboards)
             self.sun_entity = Entity(
-                model="cube",
-                scale=22,
+                model="quad",
+                scale=46,
                 unlit=True,
-                color=color.rgb(1.0, 0.95, 0.55),
+                double_sided=True,
+                color=color.rgba(1.0, 0.98, 0.78, 1.0),
                 position=(0, 260, 0),
             )
             self.moon_entity = Entity(
-                model="cube",
-                scale=18,
+                model="quad",
+                scale=34,
                 unlit=True,
-                color=color.rgb(0.85, 0.90, 1.0),
+                double_sided=True,
+                color=color.rgba(0.88, 0.92, 1.0, 1.0),
                 position=(0, -260, 0),
             )
+
+            # Blocky drifting cloud field (flat white boxes, like Minecraft)
+            rng = np.random.RandomState(777)
+            for i in range(22):
+                hx = float(rng.uniform(0, 480))
+                hz = float(rng.uniform(0, 480))
+                cy = 92.0 + float(rng.uniform(0, 8))
+                cluster = Entity(position=(0, cy, 0))
+                parts = 1 + int(rng.randint(0, 3))
+                for p in range(parts):
+                    w = float(rng.uniform(8, 26))
+                    d = float(rng.uniform(6, 20))
+                    ox = float(rng.uniform(-10, 10))
+                    oz = float(rng.uniform(-8, 8))
+                    Entity(
+                        parent=cluster,
+                        model="cube",
+                        position=(ox, float(rng.uniform(-0.5, 0.5)), oz),
+                        scale=(w, 3.5, d),
+                        unlit=True,
+                        color=color.rgba(1.0, 1.0, 1.0, 0.82),
+                    )
+                self.cloud_entities.append([cluster, hx, hz, float(rng.uniform(0.9, 1.6))])
         except Exception:
             pass
 
@@ -338,6 +366,50 @@ class World:
         except Exception:
             pass
 
+    def explode(self, center: Tuple[float, float, float], radius: float = 2.4, settings=None) -> int:
+        """
+        Minecraft-style explosion: vaporizes blocks (except bedrock) inside a sphere,
+        spawns debris particles and plays the explosion sound.
+        Returns the number of blocks destroyed.
+        """
+        from game.assets_gen import play_game_sound
+
+        play_game_sound("explode", settings)
+        cx, cy, cz = float(center[0]), float(center[1]), float(center[2])
+        r = int(math.ceil(radius))
+        destroyed = 0
+        for dy in range(-r, r + 1):
+            for dx in range(-r, r + 1):
+                for dz in range(-r, r + 1):
+                    bx, by, bz = int(math.floor(cx)) + dx, int(math.floor(cy)) + dy, int(math.floor(cz)) + dz
+                    if math.sqrt((bx + 0.5 - cx) ** 2 + (by + 0.5 - cy) ** 2 + (bz + 0.5 - cz) ** 2) > radius:
+                        continue
+                    bid = self.get_block(bx, by, bz)
+                    if bid in (AIR, BEDROCK, WATER):
+                        continue
+                    if self.set_block(bx, by, bz, AIR):
+                        destroyed += 1
+                        if destroyed % 3 == 0:
+                            self.spawn_break_particles(bx, by, bz, bid)
+        # Big debris burst
+        try:
+            from ursina import Entity, color
+            rng = np.random.RandomState(int(cx * 13 + cz * 7) & 0xFFFF)
+            for _ in range(26):
+                ox = cx + float(rng.uniform(-0.6, 0.6))
+                oy = cy + float(rng.uniform(-0.4, 0.8))
+                oz = cz + float(rng.uniform(-0.6, 0.6))
+                vx = float(rng.uniform(-5.0, 5.0))
+                vy = float(rng.uniform(2.0, 8.0))
+                vz = float(rng.uniform(-5.0, 5.0))
+                g = float(rng.uniform(0.3, 1.0))
+                ent = Entity(model="cube", scale=float(rng.uniform(0.08, 0.22)), position=(ox, oy, oz),
+                             color=color.rgb(g, g * 0.85, g * 0.6))
+                self._particles.append([ent, vx, vy, vz, 0.8])
+        except Exception:
+            pass
+        return destroyed
+
     def raycast_voxel(
         self,
         origin: Tuple[float, float, float],
@@ -455,6 +527,13 @@ class World:
                 sky_c = color.rgb(r, g, b)
                 self.sky_dome.color = sky_c
                 window.color = sky_c
+                # Distance fog matched to the sky colour (Minecraft-style horizon fade)
+                try:
+                    from ursina import scene
+                    scene.fog_color = sky_c
+                    scene.fog_density = 0.012
+                except Exception:
+                    pass
 
             orbit_r = 250.0
             sx = px + math.cos(solar_angle) * orbit_r
@@ -464,12 +543,37 @@ class World:
                 self.sun_entity.position = (sx, sy, sz)
             if self.moon_entity is not None:
                 self.moon_entity.position = (px - math.cos(solar_angle) * orbit_r, py - math.sin(solar_angle) * orbit_r, sz)
+            # Billboard the flat sun/moon quads toward the camera
+            try:
+                from ursina import camera
+                if self.sun_entity is not None:
+                    self.sun_entity.rotation = camera.rotation
+                if self.moon_entity is not None:
+                    self.moon_entity.rotation = camera.rotation
+            except Exception:
+                pass
+
+            # Drift the blocky cloud field and wrap it around the player
+            self._cloud_time += dt
+            for cent, hx, hz, spd in self.cloud_entities:
+                wx = hx + self._cloud_time * spd * 1.7
+                rx = ((wx - px + 240.0) % 480.0) - 240.0
+                rz = ((hz - pz + 240.0) % 480.0) - 240.0
+                cent.position = (px + rx, cent.y, pz + rz)
 
             # Update chunk lighting tint when brightness shifts by >= 0.03
             if abs(self.brightness - self._last_tinted_brightness) >= 0.03:
                 self._last_tinted_brightness = self.brightness
                 for ch in self.chunks.values():
                     ch.apply_lighting_tint(self.brightness)
+                # Clouds darken at night too
+                b = self.brightness
+                for cent, _hx, _hz, _spd in self.cloud_entities:
+                    try:
+                        for child in cent.children:
+                            child.color = color.rgba(b, b, b, 0.82)
+                    except Exception:
+                        pass
 
             # 4. Update debris particles
             alive_particles = []
@@ -507,6 +611,9 @@ class World:
             for ent in (self.sky_dome, self.sun_entity, self.moon_entity):
                 if ent is not None:
                     destroy(ent)
+            for cent, _hx, _hz, _spd in self.cloud_entities:
+                destroy(cent)
+            self.cloud_entities.clear()
             self.sky_dome = None
             self.sun_entity = None
             self.moon_entity = None
